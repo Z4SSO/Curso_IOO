@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POO Formas em Movimento</title>
+  <style></style>
+</head>
+
+<body>
+  <div class="wrap" style="text-align: center;">
+    <section class="card">
+      <header>
+        <h1>POO Formas em Movimento</h1>
+        <p>Início</p>
+        <div class="sub">Clique para adicionar • <span id="formas">0</span> formas •
+          <span class="kbd">R</span> reset
+        </div>
+      </header>
+      <div id="canvas-host"></div>
+    </section>
+
+  </div>
+
+  <!-- p5.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+
+  <script>
+    /**
+     * Programa OOP didático com p5.js
+     *
+     * Requisitos didáticos explicitados em comentários:
+     *  1) Encapsulamento
+     *  2) Herança
+     *  3) Polimorfismo
+     */
+
+    // ------------------------------------------------------------
+    // Utilitários
+    // ------------------------------------------------------------
+    const rand = (min, max) => Math.random() * (max - min) + min;
+    const choice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    // Paleta simples (stroke + fill). Mantemos “atraente” com transparências.
+    const PALETTE = [
+      { stroke: [110, 210, 255, 220], fill: [30, 120, 255, 60] },
+      { stroke: [255, 180, 90, 230], fill: [255, 120, 30, 55] },
+      { stroke: [170, 255, 170, 220], fill: [60, 255, 140, 55] },
+      { stroke: [255, 120, 200, 220], fill: [255, 60, 160, 55] },
+      { stroke: [210, 210, 255, 220], fill: [160, 160, 255, 55] },
+    ];
+
+    const MAX_WIDTH = 1024;
+
+    // ------------------------------------------------------------
+    // 1) ENCAPSULAMENTO
+    // ------------------------------------------------------------
+    /**
+     * A classe Shape mantém seu estado interno como campos privados (com #).
+     * Isso é um exemplo claro de ENCAPSULAMENTO:
+     * - Você NÃO acessa diretamente #x, #y, #vx, #vy de fora.
+     * - Você interage via métodos públicos (move, bounce, draw, etc.).
+     */
+    class Shape {
+      // Campos privados (encapsulamento)
+      #x; #y;           // posição
+      #vx; #vy;         // velocidade
+      #strokeRGBA;      // cor da linha
+      #fillRGBA;        // cor do preenchimento
+      #strokeW;         // espessura
+
+      constructor({ x, y, vx, vy, strokeRGBA, fillRGBA, strokeW = 2 }) {
+        this.#x = x;
+        this.#y = y;
+        this.#vx = vx;
+        this.#vy = vy;
+        this.#strokeRGBA = strokeRGBA;
+        this.#fillRGBA = fillRGBA;
+        this.#strokeW = strokeW;
+      }
+
+      // Getters (interface pública controlada)
+      get x() { return this.#x; }
+      get y() { return this.#y; }
+
+      // Setters (poderíamos validar/restringir aqui, reforçando encapsulamento)
+      set x(value) { this.#x = value; }
+      set y(value) { this.#y = value; }
+
+      applyStyle(p5) {
+        p5.strokeWeight(this.#strokeW);
+        p5.stroke(...this.#strokeRGBA); // spread operator => p5.stroke(this.#strokeRGBA[0], this.#strokeRGBA[1], this.#strokeRGBA[2], this.#strokeRGBA[3]);
+        p5.fill(...this.#fillRGBA); // spread operator => p5.fill(this.#fillRGBA[0], this.#fillRGBA[1], this.#fillRGBA[2], this.#fillRGBA[3]);
+      }
+
+      // Movimento base (compartilhado pelas subclasses)
+      move() {
+        this.#x += this.#vx;
+        this.#y += this.#vy;
+      }
+
+      // Rebate nas paredes (política padrão de colisão)
+      bounce(bounds, padding = 0) {
+        const { w, h } = bounds;
+
+        // O “padding” é uma margem para evitar que a forma encoste no limite.
+        if (this.#x < padding) { this.#x = padding; this.#vx *= -1; }
+        if (this.#x > w - padding) { this.#x = w - padding; this.#vx *= -1; }
+        if (this.#y < padding) { this.#y = padding; this.#vy *= -1; }
+        if (this.#y > h - padding) { this.#y = h - padding; this.#vy *= -1; }
+      }
+
+      // ------------------------------------------------------------
+      // 2) HERANÇA e 3) POLIMORFISMO
+      // ------------------------------------------------------------
+      /**
+       * Método “template” de atualização.
+       * Subclasses podem sobrescrever (override) se quiserem comportamento extra.
+       */
+      update(bounds) {
+        this.move();
+        // Default: bounce com padding 0. Subclasses podem ajustar padding.
+        this.bounce(bounds, 0);
+      }
+
+      /**
+       * Método “virtual”: cada forma desenha de um jeito.
+       * No JS não existe “abstract” nativo, então lançamos erro.
+       */
+      draw(_p5) {
+        throw new Error("draw() deve ser implementado pelas subclasses.");
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Herança: subclasses de Shape
+    // ------------------------------------------------------------
+
+    /**
+     * Triângulo
+     */
+    class Triangle extends Shape {
+      #size;
+      #pulse;
+      constructor(opts) {
+        super(opts);
+        this.#size = opts.size;
+        this.#pulse = rand(0.01, 0.03);
+      }
+
+      update(bounds) {
+        // Pequena variação orgânica de tamanho (efeito visual atraente)
+        this.#size += Math.sin(performance.now() * this.#pulse) * 0.04;
+        super.update(bounds);
+        super.bounce(bounds, this.#size * 0.7);
+      }
+
+      draw(p5) {
+        this.applyStyle(p5);
+        const s = this.#size;
+        p5.push();
+        p5.translate(this.x, this.y);
+        // Triângulo “apontando” para cima, com leve inclinação
+        p5.rotate(Math.sin(p5.frameCount * 0.02) * 0.2);
+        p5.triangle(
+          0, -s * 0.75,
+          -s * 0.75, s * 0.6,
+          s * 0.75, s * 0.6
+        );
+        p5.pop();
+      }
+    }
+
+    /**
+     * Quadrado
+     */
+    class Square extends Shape {
+      #size;
+      #rot;
+      constructor(opts) {
+        super(opts);
+        this.#size = opts.size;
+        this.#rot = rand(-0.03, 0.03);
+      }
+
+      update(bounds) {
+        super.update(bounds);
+        // Margem baseada no semi-diâmetro aproximado.
+        super.bounce(bounds, this.#size * 0.6);
+      }
+
+      draw(p5) {
+        this.applyStyle(p5);
+        p5.push();
+        p5.translate(this.x, this.y);
+        p5.rotate(p5.frameCount * this.#rot);
+        p5.rectMode(p5.CENTER);
+        p5.rect(0, 0, this.#size, this.#size, 8);
+        p5.pop();
+      }
+    }
+
+    class Circle extends Shape {
+      #size;
+
+      constructor(opts) {
+        super(opts);
+        this.#size = opts.size;
+      }
+
+      update(bounds) {
+        super.update(bounds);
+        super.bounce(bounds, this.#size * 0.5);
+      }
+
+      draw(p5) {
+        this.applyStyle(p5);
+        p5.push();
+        p5.translate(this.x, this.y);
+        p5.rectMode(p5.CENTER);
+        p5.circle(0, 0, this.#size);
+        p5.pop();
+      }
+
+    }
+    /**
+     * Círculo
+     */
+    // TODO: implementar
+
+    // ------------------------------------------------------------
+    // Coleção (array) de objetos heterogêneos
+    // ------------------------------------------------------------
+    /**
+     * Aqui está o ponto central de POLIMORFISMO:
+     * - shapes[] guarda objetos de CLASSES DIFERENTES.
+     * - Mesmo assim, no loop chamamos shapes[i].update(...) e shapes[i].draw(...)
+     * - Cada objeto responde do seu jeito (Circle, Square, Triangle).
+     */
+    let shapes = [];
+
+    function makeRandomShape(p5) {
+      const pad = 60;
+      const x = rand(pad, p5.width - pad);
+      const y = rand(pad, p5.height - pad);
+      const vx = rand(-2.1, 2.1);
+      const vy = rand(-2.1, 2.1);
+      const colors = choice(PALETTE);
+
+      const base = {
+        x, y, vx, vy,
+        strokeRGBA: colors.stroke,
+        fillRGBA: colors.fill,
+        strokeW: rand(1.5, 3.2),
+      };
+
+      const kind = choice(["square", "triangle", "circle"]);
+      if (kind === "square") {
+        return new Square({ ...base, size: rand(26, 64) });
+      }
+      if (kind === "circle") {
+        return new Circle({ ...base, size: rand(28, 70) });
+      }
+      return new Triangle({ ...base, size: rand(28, 70) });
+    }
+
+    function resetScene(p5) {
+      shapes = [];
+      const n = 0;
+      for (let i = 0; i < n; i++) shapes.push(makeRandomShape(p5));
+    }
+
+    // ------------------------------------------------------------
+    // p5.js
+    // ------------------------------------------------------------
+    new p5((p5) => {
+      p5.setup = () => {
+        const host = document.getElementById("canvas-host");
+        const w = Math.min(MAX_WIDTH, host.clientWidth - 24);
+        const h = Math.round(w * 0.62);
+
+        const cnv = p5.createCanvas(w, h);
+        cnv.parent(host);
+        p5.pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+
+        resetScene(p5);
+      };
+
+      p5.windowResized = () => {
+        const host = document.getElementById("canvas-host");
+        if (!host) return;
+        const w = Math.min(MAX_WIDTH, host.clientWidth - 24);
+        const h = Math.round(w * 0.62);
+        p5.resizeCanvas(w, h);
+      };
+
+      p5.draw = () => {
+        // Fundo com “brilho” suave
+        p5.background(10, 14, 28);
+
+        // Limites do "campo" de colisão
+        const bounds = { w: p5.width, h: p5.height };
+
+        // Atualiza e desenha todas as formas (polimorfismo)
+        for (const s of shapes) {
+          s.update(bounds);
+          s.draw(p5);
+        }
+
+      };
+
+      p5.mousePressed = () => {
+        // Clique: adiciona uma forma
+        shapes.push(makeRandomShape(p5));
+        document.getElementById("formas").textContent = shapes.length;
+      };
+
+      p5.keyPressed = () => {
+        const k = (p5.key || "").toLowerCase();
+        if (k === "r") resetScene(p5);
+      };
+
+    });
+  </script>
+</body>
+
+</html>
